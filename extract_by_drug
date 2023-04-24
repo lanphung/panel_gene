@@ -1,0 +1,95 @@
+import pandas as pd
+import numpy as np
+import sort
+import display
+import docx
+import xlsxwriter
+
+GENE_MAX_NUM = 50
+
+cond = [
+    ['breast', 'asian_census', 'census'],
+    ['hepatocellular_carcinoma', 'asian_census', 'census'],
+    ['lung', 'asian_census', 'census'],
+    ['large_intestine', 'asian_census', 'census'],
+    ['thyroid', 'asian_census', 'census']
+]
+
+def data_process():
+    df = pd.read_excel(f"raw_output/druglist_VN.xlsx").dropna()
+    for j in range(0,5):
+        dg = pd.read_csv(f"raw_output/actionability_output/cosmic_{cond[j][0]}_cancer_actionability.csv")
+        out = pd.DataFrame().reindex_like(dg).dropna()
+        for drug in df['Drug_name']:
+            print(drug)
+            if dg['DRUG_COMBINATION'].eq(drug).any():
+                inc = dg[dg['DRUG_COMBINATION']==drug]
+                out = pd.concat([out, inc], axis=0)
+                #out = out[out['MUTATION_REMARK'].str.contains('unspecified')==False]
+        out.to_csv(f"output/{cond[j][0]}_cancer/drug/{cond[j][0]}_potential_gene_list.csv", index=None, header=True)
+    
+
+
+def write_to_doc(asia_gene, world_gene, cancer_name):
+    mydoc = docx.Document()
+    mydoc.add_paragraph(f"Top mutated genes (tier 1) of {cancer_name} cancer are (n={GENE_MAX_NUM}):")
+    para = "Asia:\n"
+    data = pd.DataFrame(
+        {'list' : asia_gene['list'],
+         'ratio' : asia_gene['ratio']
+        }).head(min(len(asia_gene['list']), GENE_MAX_NUM))
+    data = data.sort_values('ratio', ascending=False).reset_index(drop=True)
+    for k in range(0, len(data)):
+        para += f"{data['list'][k]} ({round(data['ratio'][k]*100,4)}%)\n"
+    para += "\n\n"
+    para += "The world:\n"
+    data = data[0:0]
+    data['list'] = world_gene['list']
+    data['ratio'] = world_gene['ratio']
+    for k in range(0, len(data)):
+        para += f"{data['list'][k]} ({round(data['ratio'][k]*100,4)}%)\n"
+    mydoc.add_paragraph(para)
+    mydoc.save(f"output/{cancer_name}_cancer/doc/{cancer_name}_cancer_list.docx")
+
+def frequency_cal():
+    print('here!')
+    num_asia = 0
+    for j in range(0,5):
+        ratio = dict()
+        ratio_census = dict()
+        for i in range (1,3):
+            df = pd.read_csv(f"output/{cond[j][0]}_cancer/csv/sorted_cosmic_{cond[j][0]}_cancer_{cond[j][i]}_mutation.csv")
+            if i==1 : num_asia += df['ID_tumour'].nunique()
+            list = df['Gene name'].unique() #a list of unique gene names in the data
+            freq_list = [0]*len(list)
+            ratio_list = [1.0]*len(list)
+            gene_ratio = {
+                        'list' : list, 
+                        'freq': freq_list,  #actual number of occurances for each gene with unique id_tumour values
+                        'ratio': ratio_list, #ratio of each gene among the sum
+                        }
+            sum_gene = 0 #number of all genes with unique id_tumour values  
+            for k in range(0, len(list)):
+                gene_ratio['freq'][k] = sort._count_real_gene_freq(list[k],df)
+                sum_gene += gene_ratio['freq'][k]   
+            for k in range(0, len(list)):
+                gene_ratio['ratio'][k] = gene_ratio['freq'][k] / sum_gene
+            if i==1:
+                ratio = gene_ratio
+            else:
+                ratio_census = gene_ratio
+        print(cond[j][0])
+        #display._chart_create(ratio, ratio_census, cond[j][0], 'g', 'Asia', 'The World')
+        #write_to_doc(ratio, ratio_census, cond[j][0])
+    print(num_asia)
+
+data_process()
+#frequency_cal()
+            
+            
+
+
+
+
+
+
